@@ -1261,6 +1261,7 @@ Function PlaceForest(fr.Forest,x#,y#,z#,r.Rooms)
 					EntityType tile_entity,HIT_MAP
 					EntityFX tile_entity,1
 					EntityParent tile_entity,fr\Forest_Pivot
+					EntityPickMode tile_entity,2
 					
 					If it<>Null Then EntityParent it\collider,0
 					
@@ -1296,6 +1297,7 @@ Function PlaceForest(fr.Forest,x#,y#,z#,r.Rooms)
 				
 				EntityType fr\DetailEntities[i],HIT_MAP
 				;EntityParent frame,fr\DetailEntities[i]
+				EntityPickMode fr\DetailEntities[i],2
 				
 				PositionEntity fr\DetailEntities[i],x+(tx*tile_size),y,z+(ty*tile_size)+(tile_size/2)-(tile_size*i),True
 				RotateEntity fr\DetailEntities[i],0,180*i,0
@@ -1398,6 +1400,11 @@ Type RoomTemplates
 	Field TempTriggerboxName$[128]
 	
 	Field UseLightCones%
+	
+	Field DisableOverlapCheck% = True
+	
+	Field MinX#, MinY#, MinZ#
+	Field MaxX#, MaxY#, MaxZ#
 End Type 	
 
 Function CreateRoomTemplate.RoomTemplates(meshpath$)
@@ -1452,7 +1459,7 @@ Function LoadRoomTemplates(file$)
 			rt\Large = GetINIInt(file, TemporaryString, "large")
 			rt\DisableDecals = GetINIInt(file, TemporaryString, "disabledecals")
 			rt\UseLightCones = GetINIInt(file, TemporaryString, "usevolumelighting")
-			
+			rt\DisableOverlapCheck = GetINIInt(file, TemporaryString, "disableoverlapcheck")
 		EndIf
 	Wend
 	
@@ -1480,6 +1487,8 @@ Function LoadRoomMesh(rt.RoomTemplates)
 	EndIf
 	
 	If (Not rt\obj) Then RuntimeError "Failed to load map file "+Chr(34)+mapfile+Chr(34)+"."
+	
+	CalculateRoomTemplateExtents(rt)
 	
 	HideEntity(rt\obj)
 	
@@ -1564,7 +1573,6 @@ Type Rooms
 	Field NonFreeAble%[10]
 	Field Textures%[10]
 	
-	;New Room Variables in SCP:CB 1.3 - ENDSHN
 	Field MaxLights% = 0
 	Field LightSpriteHidden%[MaxRoomLights]
 	Field LightSpritesPivot%[MaxRoomLights]
@@ -1581,6 +1589,9 @@ Type Rooms
 	Field LightCone%[MaxRoomLights]
 	Field LightConeSpark%[MaxRoomLights]
 	Field LightConeSparkTimer#[MaxRoomLights]
+	
+	Field MinX#, MinY#, MinZ#
+	Field MaxX#, MaxY#, MaxZ#
 End Type 
 
 Const gridsz%=20
@@ -1642,6 +1653,7 @@ Function CreateRoom.Rooms(zone%, roomshape%, x#, y#, z#, name$ = "")
 					AddLightCones(r)
 				EndIf
 				
+				CalculateRoomExtents(r)
 				Return r
 			EndIf
 		Next
@@ -1681,11 +1693,11 @@ Function CreateRoom.Rooms(zone%, roomshape%, x#, y#, z#, name$ = "")
 						AddLightCones(r)
 					EndIf
 					
+					CalculateRoomExtents(r)
 					Return r	
 				End If
 			EndIf
 		Next
-		
 	Next
 	
 	CatchErrors("CreateRoom")
@@ -1976,11 +1988,13 @@ Function FillRoom(r.Rooms)
 			r\Objects[13]=LoadMesh_Strict("GFX\map\gateawall1.b3d",r\obj)
 			PositionEntity(r\Objects[13], r\x-4308.0*RoomScale, -1045.0*RoomScale, r\z+544.0*RoomScale, True)
 			EntityColor r\Objects[13], 25,25,25
+			EntityType r\Objects[13],HIT_MAP
 			;EntityFX(r\Objects[13],1)
 			
 			r\Objects[14]=LoadMesh_Strict("GFX\map\gateawall2.b3d",r\obj)
 			PositionEntity(r\Objects[14], r\x-3820.0*RoomScale, -1045.0*RoomScale, r\z+544.0*RoomScale, True)	
 			EntityColor r\Objects[14], 25,25,25
+			EntityType r\Objects[14],HIT_MAP
 			;EntityFX(r\Objects[14],1)
 			
 			r\Objects[15]=CreatePivot(r\obj)
@@ -2330,11 +2344,12 @@ Function FillRoom(r.Rooms)
 			EntityParent(r\Objects[0], r\obj)
 			
 			r\Objects[1] = CreatePivot()
-			PositionEntity(r\Objects[1], r\x + 1312.0*RoomScale, 0.5, r\z+448.0*RoomScale)
-			EntityParent(r\Objects[1], r\obj)			
+			;PositionEntity(r\Objects[1], r\x + 1270.0*RoomScale, 0.5, r\z+570.0*RoomScale)
+			PositionEntity(r\Objects[1], r\x + 1530.0*RoomScale, 0.5, r\z+512.0*RoomScale)
+			EntityParent(r\Objects[1], r\obj)
 			
 			r\Objects[2] = CreatePivot()
-			PositionEntity(r\Objects[2], r\x + 1248.0*RoomScale, 0.01, r\z+384.0*RoomScale)
+			PositionEntity(r\Objects[2], r\x + 1535.0*RoomScale, r\y+150.0*RoomScale, r\z+512.0*RoomScale)
 			EntityParent(r\Objects[2], r\obj)
 			;[End Block]
 		Case "room2storage"
@@ -2804,7 +2819,7 @@ Function FillRoom(r.Rooms)
 			;[Block]
 			d = CreateDoor(r\zone, r\x - 400.0 * RoomScale, 0, r\z, -90, r, False, False, 3)
 			d = CreateDoor(r\zone, r\x, 0, r\z - 480.0 * RoomScale, 180, r, False, False, 3)
-			 ;: d\buttons[0] = False
+			;: d\buttons[0] = False
 			;PositionEntity (d\buttons[0], EntityX(d\buttons[0],True), EntityY(d\buttons[0],True), r\z + 288.0 * RoomScale, True)
 			;PositionEntity (d\buttons[1], EntityX(d\buttons[1],True), EntityY(d\buttons[1],True), r\z + 320.0 * RoomScale, True)
 			
@@ -2822,7 +2837,7 @@ Function FillRoom(r.Rooms)
 			PositionEntity(r\Objects[1], r\x + 64.0 * RoomScale, 0.5, r\z - 640.0 * RoomScale, True)
 			
 			r\Objects[2] = CreatePivot(r\obj)
-			PositionEntity(r\Objects[2], r\x - 608.0 * RoomScale, 0.5, r\z, True)
+			PositionEntity(r\Objects[2], r\x, 0.5, r\z, True)
 			
 			r\Objects[3] = CreatePivot(r\obj)
 			PositionEntity(r\Objects[3], r\x + 320.0 * RoomScale, 0.5, r\z + 704.0 * RoomScale, True)
@@ -3119,8 +3134,8 @@ Function FillRoom(r.Rooms)
 		Case "room012"
 			;[Block]
 			d.Doors = CreateDoor(r\zone, r\x + 264.0 * RoomScale, 0.0, r\z + 672.0 * RoomScale, 270, r, False, False, 3)
-			PositionEntity(d\buttons[0], r\x + 224.0 * RoomScale, EntityY(d\buttons[0],True), r\z + 880.0 * RoomScale, True)
-			PositionEntity(d\buttons[1], r\x + 304.0 * RoomScale, EntityY(d\buttons[1],True), r\z + 840.0 * RoomScale, True)	
+			PositionEntity(d\buttons[0], r\x + 224.0 * RoomScale, EntityY(d\buttons[0],True), r\z + 540.0 * RoomScale, True)
+			PositionEntity(d\buttons[1], r\x + 304.0 * RoomScale, EntityY(d\buttons[1],True), r\z + 840.0 * RoomScale, True)
 			TurnEntity d\buttons[1],0,0,0,True
 			
 			r\RoomDoors[0] = CreateDoor(r\zone, r\x -512.0 * RoomScale, -768.0*RoomScale, r\z -336.0 * RoomScale, 0, r, False, False)
@@ -3267,8 +3282,10 @@ Function FillRoom(r.Rooms)
 			RotateEntity(r\Objects[4+1], -81, -180, 0)
 			
 			;096 spawnpoint
+;			r\Objects[6]=CreatePivot(r\obj)
+;			PositionEntity(r\Objects[6], r\x - 848*RoomScale, 0.5, r\z-576*RoomScale, True)
 			r\Objects[6]=CreatePivot(r\obj)
-			PositionEntity(r\Objects[6], r\x - 848*RoomScale, 0.5, r\z-576*RoomScale, True)
+			PositionEntity(r\Objects[6],r\x-320*RoomScale,0.5,r\z,True)
 			;guard spawnpoint
 			r\Objects[7]=CreatePivot(r\obj)
 			PositionEntity(r\Objects[7], r\x - 1328.0 * RoomScale, 0.5, r\z + 528*RoomScale, True)
@@ -4115,14 +4132,6 @@ Function FillRoom(r.Rooms)
 			
 			r\Objects[9] = CreatePivot(r\obj)
 			PositionEntity (r\Objects[9], r\x - 272 * RoomScale, r\y - 672.0 * RoomScale, r\z + 2736.0 * RoomScale, True)
-			
-			;sc.SecurityCams = CreateSecurityCam(r\x-1216.0*RoomScale, r\y-336.0*RoomScale, r\z+1468.0*RoomScale, r, True)
-			;sc\angle = 315
-			;sc\turn = 45
-			;sc\room = r
-			;TurnEntity(sc\CameraObj, 20, 0, 0)
-			;EntityParent(sc\obj, r\obj)
-			;sc\ID = 4
 			;[End Block]
 		Case "room1archive"
 			;[Block]
@@ -4409,7 +4418,8 @@ Function FillRoom(r.Rooms)
 			For i = 8 To 11
 				ScaleEntity (r\Objects[i],RoomScale,RoomScale,RoomScale)
 				EntityType r\Objects[i], HIT_MAP
-				EntityPickMode r\Objects[i], 3
+				;EntityPickMode r\Objects[i], 3
+				EntityPickMode r\Objects[i], 2
 				PositionEntity(r\Objects[i],r\x,r\y,r\z+32.0,True)
 			Next
 			
@@ -4439,7 +4449,8 @@ Function FillRoom(r.Rooms)
 				angle# = (i-1) * (360.0/8.0)
 				
 				EntityType r\Objects[i-1], HIT_MAP
-				EntityPickMode r\Objects[i-1], 3		
+				;EntityPickMode r\Objects[i-1], 3
+				EntityPickMode r\Objects[i-1], 2
 				
 				RotateEntity(r\Objects[i-1],0,angle-90,0)
 				PositionEntity(r\Objects[i-1],r\x+Cos(angle)*(512.0*RoomScale),0.0,r\z+Sin(angle)*(512.0*RoomScale))
@@ -4527,7 +4538,7 @@ Function FillRoom(r.Rooms)
 		Case "room2servers2"
 			;[Block]
 			d.Doors = CreateDoor(r\zone, r\x + 264.0 * RoomScale, 0.0, r\z + 672.0 * RoomScale, 270, r, False, False, 3)
-			PositionEntity(d\buttons[0], r\x + 224.0 * RoomScale, EntityY(d\buttons[0],True), r\z + 880.0 * RoomScale, True)
+			PositionEntity(d\buttons[0], r\x + 224.0 * RoomScale, EntityY(d\buttons[0],True), r\z + 510.0 * RoomScale, True)
 			PositionEntity(d\buttons[1], r\x + 304.0 * RoomScale, EntityY(d\buttons[1],True), r\z + 840.0 * RoomScale, True)	
 			TurnEntity d\buttons[1],0,0,0,True
 			d.Doors = CreateDoor(r\zone, r\x -512.0 * RoomScale, -768.0*RoomScale, r\z -336.0 * RoomScale, 0, r, False, False, 3)
@@ -4942,7 +4953,6 @@ Function FillRoom(r.Rooms)
 		r\TriggerboxAmount = r\RoomTemplate\TempTriggerboxAmount
 		For i = 0 To r\TriggerboxAmount-1
 			r\Triggerbox[i] = CopyEntity(r\RoomTemplate\TempTriggerbox[i],r\obj)
-			EntityAlpha r\Triggerbox[i],0.0
 			r\TriggerboxName[i] = r\RoomTemplate\TempTriggerboxName[i]
 			DebugLog "Triggerbox found: "+i
 			DebugLog "Triggerbox "+i+" name: "+r\TriggerboxName[i]
@@ -5057,6 +5067,21 @@ Function UpdateRooms()
 					Exit
 				EndIf
 			Next
+			If DebugHUD
+				If r\TriggerboxAmount>0
+					For i=0 To r\TriggerboxAmount-1
+						EntityColor r\Triggerbox[i],255,255,0
+						EntityAlpha r\Triggerbox[i],0.2
+					Next
+				EndIf
+			Else
+				If r\TriggerboxAmount>0
+					For i=0 To r\TriggerboxAmount-1
+						EntityColor r\Triggerbox[i],255,255,255
+						EntityAlpha r\Triggerbox[i],0.0
+					Next
+				EndIf
+ 			EndIf
 		EndIf
 	Next
 	
@@ -5069,16 +5094,16 @@ Function UpdateRooms()
 		EntityAlpha(GetChild(PlayerRoom\obj,2),1)
 		For i=0 To 3
 			If PlayerRoom\Adjacent[i]<>Null Then
-				x = Abs(EntityX(Collider,True)-EntityX(PlayerRoom\AdjDoor[i]\frameobj,True))
-				z = Abs(EntityZ(Collider,True)-EntityZ(PlayerRoom\AdjDoor[i]\frameobj,True))
-				If PlayerRoom\AdjDoor[i]\openstate = 0 Then
-					EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),0)
-				;ElseIf Abs(DeltaYaw(Camera,PlayerRoom\Adjacent[i]\obj))>90+(((8.0-Max(x,z))/8.0)*90.0) Then
-				;	EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),0)
-				ElseIf (Not EntityInView(PlayerRoom\AdjDoor[i]\frameobj,Camera))
-					EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),0)
-				Else
-					EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),1)
+				If PlayerRoom\AdjDoor[i]<>Null
+					x = Abs(EntityX(Collider,True)-EntityX(PlayerRoom\AdjDoor[i]\frameobj,True))
+					z = Abs(EntityZ(Collider,True)-EntityZ(PlayerRoom\AdjDoor[i]\frameobj,True))
+					If PlayerRoom\AdjDoor[i]\openstate = 0 Then
+						EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),0)
+					ElseIf (Not EntityInView(PlayerRoom\AdjDoor[i]\frameobj,Camera))
+						EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),0)
+					Else
+						EntityAlpha(GetChild(PlayerRoom\Adjacent[i]\obj,2),1)
+					EndIf
 				EndIf
 				
 				For j=0 To 3
@@ -5760,8 +5785,6 @@ Function UpdateSecurityCams()
 	CatchErrors("Uncaught (UpdateSecurityCams)")
 	Local sc.SecurityCams
 	
-	PlayerDetected = False
-	
 	;coffineffect = 0, not affected by 895
 	;coffineffect = 1, constantly affected by 895
 	;coffineffect = 2, 079 can broadcast 895 feed on this screen
@@ -5792,7 +5815,9 @@ Function UpdateSecurityCams()
 				If sc\FollowPlayer Then
 					If sc<>CoffinCam
 						If EntityVisible(sc\CameraObj,Camera)
-							PlayerDetected = True
+							If MTF_CameraCheckTimer>0.0
+								MTF_CameraCheckDetected=True
+							EndIf
 						EndIf
 					EndIf
 					PointEntity(sc\CameraObj, Camera)
@@ -5837,7 +5862,9 @@ Function UpdateSecurityCams()
 					If sc<>CoffinCam
 						If (Abs(DeltaYaw(sc\CameraObj,Camera))<60.0)
 							If EntityVisible(sc\CameraObj,Camera)
-								PlayerDetected = True
+								If MTF_CameraCheckTimer>0.0
+									MTF_CameraCheckDetected=True
+								EndIf
 							EndIf
 						EndIf
 					EndIf
@@ -6649,11 +6676,7 @@ Function CreateMap()
 	
 	Local zone%
 	
-	Local strtemp$ = ""
-	For i = 1 To Len(RandomSeed)
-		strtemp = strtemp+Asc(Mid(RandomSeed,i,1))
-	Next
-	SeedRnd Abs(Int(strtemp))
+	SeedRnd GenerateSeedNumber(RandomSeed)
 	
 	Dim MapName$(MapWidth, MapHeight)
 	
@@ -7092,7 +7115,6 @@ Function CreateMap()
 				Else ;If zone = 3
 					r = CreateRoom(zone, ROOM2, x * 8, 0, y * 8, "checkpoint2")
 				EndIf
-				
 			ElseIf MapTemp(x, y) > 0
 				
 				temp = Min(MapTemp(x + 1, y),1) + Min(MapTemp(x - 1, y),1) + Min(MapTemp(x, y + 1),1) + Min(MapTemp(x, y - 1),1)
@@ -7100,14 +7122,7 @@ Function CreateMap()
 				Select temp ;viereisiss� ruuduissa olevien huoneiden m��r�
 					Case 1
 						If MapRoomID(ROOM1) < MaxRooms And MapName(x,y) = "" Then
-							If CheckRoomOverlap(MapRoom(ROOM1, MapRoomID(ROOM1)), x, y) Then
-								For i = MapRoomID(ROOM1)+1 To MaxRooms
-									If MapRoom(ROOM1, i)="" Then MapRoom(ROOM1, i)=MapRoom(ROOM1, MapRoomID(ROOM1)) : Exit
-								Next
-								MapRoom(ROOM1, MapRoomID(ROOM1))=""
-							Else
-								If MapRoom(ROOM1, MapRoomID(ROOM1)) <> "" Then MapName(x, y) = MapRoom(ROOM1, MapRoomID(ROOM1))	
-							EndIf
+							If MapRoom(ROOM1, MapRoomID(ROOM1)) <> "" Then MapName(x, y) = MapRoom(ROOM1, MapRoomID(ROOM1))	
 						EndIf
 						
 						r = CreateRoom(zone, ROOM1, x * 8, 0, y * 8, MapName(x, y))
@@ -7123,19 +7138,11 @@ Function CreateMap()
 						Else 
 							r\angle = 0
 						End If
-						
 						MapRoomID(ROOM1)=MapRoomID(ROOM1)+1
 					Case 2
 						If MapTemp(x - 1, y)>0 And MapTemp(x + 1, y)>0 Then
 							If MapRoomID(ROOM2) < MaxRooms And MapName(x,y) = ""  Then
-								If CheckRoomOverlap(MapRoom(ROOM2, MapRoomID(ROOM2)), x, y) Then
-									For i = MapRoomID(ROOM2)+1 To MaxRooms
-										If MapRoom(ROOM2, i)="" Then MapRoom(ROOM2, i)=MapRoom(ROOM2, MapRoomID(ROOM2)) : Exit
-									Next
-									MapRoom(ROOM2, MapRoomID(ROOM2))=""
-								Else
-									If MapRoom(ROOM2, MapRoomID(ROOM2)) <> "" Then MapName(x, y) = MapRoom(ROOM2, MapRoomID(ROOM2))	
-								EndIf
+								If MapRoom(ROOM2, MapRoomID(ROOM2)) <> "" Then MapName(x, y) = MapRoom(ROOM2, MapRoomID(ROOM2))	
 							EndIf
 							r = CreateRoom(zone, ROOM2, x * 8, 0, y * 8, MapName(x, y))
 							If Rand(2) = 1 Then r\angle = 90 Else r\angle = 270
@@ -7143,61 +7150,37 @@ Function CreateMap()
 							MapRoomID(ROOM2)=MapRoomID(ROOM2)+1
 						ElseIf MapTemp(x, y - 1)>0 And MapTemp(x, y + 1)>0
 							If MapRoomID(ROOM2) < MaxRooms And MapName(x,y) = ""  Then
-								If CheckRoomOverlap(MapRoom(ROOM2, MapRoomID(ROOM2)), x, y) Then
-									For i = MapRoomID(ROOM2)+1 To MaxRooms
-										If MapRoom(ROOM2, i)="" Then MapRoom(ROOM2, i)=MapRoom(ROOM2, MapRoomID(ROOM2)) : Exit
-									Next
-									MapRoom(ROOM2, MapRoomID(ROOM2))=""
-								Else
-									If MapRoom(ROOM2, MapRoomID(ROOM2)) <> "" Then MapName(x, y) = MapRoom(ROOM2, MapRoomID(ROOM2))	
-								EndIf
+								If MapRoom(ROOM2, MapRoomID(ROOM2)) <> "" Then MapName(x, y) = MapRoom(ROOM2, MapRoomID(ROOM2))	
 							EndIf
 							r = CreateRoom(zone, ROOM2, x * 8, 0, y * 8, MapName(x, y))
 							If Rand(2) = 1 Then r\angle = 180 Else r\angle = 0
-							TurnEntity(r\obj, 0, r\angle, 0)								
+							TurnEntity(r\obj, 0, r\angle, 0)
 							MapRoomID(ROOM2)=MapRoomID(ROOM2)+1
 						Else
 							If MapRoomID(ROOM2C) < MaxRooms And MapName(x,y) = ""  Then
-								If CheckRoomOverlap(MapRoom(ROOM2C, MapRoomID(ROOM2C)), x, y) Then
-									For i = MapRoomID(ROOM2C)+1 To MaxRooms
-										If MapRoom(ROOM2C, i)="" Then MapRoom(ROOM2C, i)=MapRoom(ROOM2C, MapRoomID(ROOM2C)) : Exit
-									Next
-									MapRoom(ROOM2C, MapRoomID(ROOM2C))=""
-								Else
-									If MapRoom(ROOM2C, MapRoomID(ROOM2C)) <> "" Then MapName(x, y) = MapRoom(ROOM2C, MapRoomID(ROOM2C))	
-								EndIf
+								If MapRoom(ROOM2C, MapRoomID(ROOM2C)) <> "" Then MapName(x, y) = MapRoom(ROOM2C, MapRoomID(ROOM2C))	
 							EndIf
 							
 							If MapTemp(x - 1, y)>0 And MapTemp(x, y + 1)>0 Then
 								r = CreateRoom(zone, ROOM2C, x * 8, 0, y * 8, MapName(x, y))
 								r\angle = 180
 								TurnEntity(r\obj, 0, r\angle, 0)
-								MapRoomID(ROOM2C)=MapRoomID(ROOM2C)+1
 							ElseIf MapTemp(x + 1, y)>0 And MapTemp(x, y + 1)>0
 								r = CreateRoom(zone, ROOM2C, x * 8, 0, y * 8, MapName(x, y))
 								r\angle = 90
 								TurnEntity(r\obj, 0, r\angle, 0)
-								MapRoomID(ROOM2C)=MapRoomID(ROOM2C)+1		
 							ElseIf MapTemp(x - 1, y)>0 And MapTemp(x, y - 1)>0
 								r = CreateRoom(zone, ROOM2C, x * 8, 0, y * 8, MapName(x, y))
 								TurnEntity(r\obj, 0, 270, 0)
 								r\angle = 270
-								MapRoomID(ROOM2C)=MapRoomID(ROOM2C)+1		
 							Else
 								r = CreateRoom(zone, ROOM2C, x * 8, 0, y * 8, MapName(x, y))
-								MapRoomID(ROOM2C)=MapRoomID(ROOM2C)+1
 							EndIf
+							MapRoomID(ROOM2C)=MapRoomID(ROOM2C)+1
 						EndIf
 					Case 3
 						If MapRoomID(ROOM3) < MaxRooms And MapName(x,y) = ""  Then
-							If CheckRoomOverlap(MapRoom(ROOM3, MapRoomID(ROOM3)), x, y) Then
-								For i = MapRoomID(ROOM3)+1 To MaxRooms
-									If MapRoom(ROOM3, i)="" Then MapRoom(ROOM3, i)=MapRoom(ROOM3, MapRoomID(ROOM3)) : Exit
-								Next
-								MapRoom(ROOM3, MapRoomID(ROOM3))=""
-							Else
-								If MapRoom(ROOM3, MapRoomID(ROOM3)) <> "" Then MapName(x, y) = MapRoom(ROOM3, MapRoomID(ROOM3))	
-							EndIf
+							If MapRoom(ROOM3, MapRoomID(ROOM3)) <> "" Then MapName(x, y) = MapRoom(ROOM3, MapRoomID(ROOM3))	
 						EndIf
 						
 						r = CreateRoom(zone, ROOM3, x * 8, 0, y * 8, MapName(x, y))
@@ -7214,46 +7197,13 @@ Function CreateMap()
 						MapRoomID(ROOM3)=MapRoomID(ROOM3)+1
 					Case 4
 						If MapRoomID(ROOM4) < MaxRooms And MapName(x,y) = ""  Then
-							If CheckRoomOverlap(MapRoom(ROOM4, MapRoomID(ROOM4)), x, y) Then
-								For i = MapRoomID(ROOM4)+1 To MaxRooms
-									If MapRoom(ROOM4, i)="" Then MapRoom(ROOM4, i)=MapRoom(ROOM4, MapRoomID(ROOM4)) : Exit
-								Next
-								MapRoom(ROOM4, MapRoomID(ROOM4))=""
-							Else
-								If MapRoom(ROOM4, MapRoomID(ROOM4)) <> "" Then MapName(x, y) = MapRoom(ROOM4, MapRoomID(ROOM4))	
-							EndIf
+							If MapRoom(ROOM4, MapRoomID(ROOM4)) <> "" Then MapName(x, y) = MapRoom(ROOM4, MapRoomID(ROOM4))	
 						EndIf
 						
 						r = CreateRoom(zone, ROOM4, x * 8, 0, y * 8, MapName(x, y))
 						MapRoomID(ROOM4)=MapRoomID(ROOM4)+1
 				End Select
 				
-			End If
-			
-			If MapTemp(x, y)>0 Then
-				If (Floor((x + y) / 2.0) = Ceil((x + y) / 2.0)) Then
-					If zone = 2 Then temp = 2 Else temp=0
-					
-					If MapTemp(x + 1, y) Then
-						d.Doors = CreateDoor(r\zone, Float(x) * spacing + spacing / 2.0, 0, Float(y) * spacing, 90, r, Max(Rand(-3, 1), 0), temp)
-						r\AdjDoor[0] = d
-					EndIf
-					
-					If MapTemp(x - 1, y) Then
-						d.Doors = CreateDoor(r\zone, Float(x) * spacing - spacing / 2.0, 0, Float(y) * spacing, 90, r, Max(Rand(-3, 1), 0), temp)
-						r\AdjDoor[2] = d
-					EndIf
-					
-					If MapTemp(x, y + 1) Then
-						d.Doors = CreateDoor(r\zone, Float(x) * spacing, 0, Float(y) * spacing + spacing / 2.0, 0, r, Max(Rand(-3, 1), 0), temp)
-						r\AdjDoor[3] = d
-					EndIf
-					
-					If MapTemp(x, y - 1) Then
-						d.Doors = CreateDoor(r\zone, Float(x) * spacing, 0, Float(y) * spacing - spacing / 2.0, 0, r, Max(Rand(-3, 1), 0), temp)
-						r\AdjDoor[1] = d
-					EndIf
-				End If
 			EndIf
 			
 		Next
@@ -7272,6 +7222,10 @@ Function CreateMap()
 	
 	r = CreateRoom(0, ROOM1, 8, 800, 0, "dimension1499")
 	MapRoomID(ROOM1)=MapRoomID(ROOM1)+1
+	
+	For r.Rooms = Each Rooms
+		PreventRoomOverlap(r)
+	Next
 	
 	If 0 Then 
 		Repeat
@@ -7332,6 +7286,40 @@ Function CreateMap()
 	Next
 	
 	For r.Rooms = Each Rooms
+		x = Int(r\x/8.0)
+		y = Int(r\z/8.0)
+		spacing = 8.0
+		If MapTemp(x, y)>0 Then
+			If (Floor((x + y) / 2.0) = Ceil((x + y) / 2.0)) Then
+				If r\zone = 2 Then temp = 2 Else temp=0
+				
+				If MapTemp(x + 1, y) Then
+					d.Doors = CreateDoor(r\zone, Float(x) * spacing + spacing / 2.0, 0, Float(y) * spacing, 90, r, Max(Rand(-3, 1), 0), temp)
+					r\AdjDoor[0] = d
+				EndIf
+				
+				If MapTemp(x - 1, y) Then
+					d.Doors = CreateDoor(r\zone, Float(x) * spacing - spacing / 2.0, 0, Float(y) * spacing, 90, r, Max(Rand(-3, 1), 0), temp)
+					r\AdjDoor[2] = d
+				EndIf
+				
+				If MapTemp(x, y + 1) Then
+					d.Doors = CreateDoor(r\zone, Float(x) * spacing, 0, Float(y) * spacing + spacing / 2.0, 0, r, Max(Rand(-3, 1), 0), temp)
+					r\AdjDoor[3] = d
+				EndIf
+				
+				If MapTemp(x, y - 1) Then
+					d.Doors = CreateDoor(r\zone, Float(x) * spacing, 0, Float(y) * spacing - spacing / 2.0, 0, r, Max(Rand(-3, 1), 0), temp)
+					r\AdjDoor[1] = d
+				EndIf
+			EndIf
+		EndIf
+	Next
+	
+	For r.Rooms = Each Rooms
+		If r\angle >= 360
+            r\angle = r\angle-360
+        EndIf
 		r\Adjacent[0]=Null
 		r\Adjacent[1]=Null
 		r\Adjacent[2]=Null
@@ -7360,30 +7348,6 @@ Function CreateMap()
 		Next
 	Next
 	
-End Function
-
-
-Function CheckRoomOverlap(roomname$, x%, y%)
-	Return False
-	
-	roomname = Lower(roomname)
-	
-	Local rt.RoomTemplates
-	For rt.RoomTemplates = Each RoomTemplates
-		If rt\Name = roomname Then
-			If (Not rt\Large) Then Return False
-			
-			For x2= Max(0,x-1) To Min(MapWidth-1,x+1)
-				For y2= Max(0,y-1) To Min(MapHeight-1,y+1)
-					If x2<>x And y2<>y Then
-						If MapTemp(x2,y2)>1 Then Return True
-					EndIf
-				Next
-			Next
-			
-			Return False
-		EndIf
-	Next
 End Function
 
 Function SetRoom(room_name$,room_type%,pos%,min_pos%,max_pos%) ;place a room without overwriting others
@@ -7765,12 +7729,8 @@ Dim CHUNKDATA(64,64)
 
 Function SetChunkDataValues()
 	Local StrTemp$,i%,j%
-	
 	StrTemp$ = ""
-	For i = 1 To Len(RandomSeed)
-		StrTemp = StrTemp+Asc(Mid(RandomSeed,i,1))
-	Next
-	SeedRnd Abs(Int(StrTemp))
+	SeedRnd GenerateSeedNumber(RandomSeed)
 	
 	For i = 0 To 63
 		For j = 0 To 63
@@ -7795,12 +7755,8 @@ Function CreateChunkParts(r.Rooms)
 	Local i%,StrTemp$,j%
 	Local chp.ChunkPart,chp2.ChunkPart
 	Local obj%
-	
 	StrTemp$ = ""
-	For i = 1 To Len(RandomSeed)
-		StrTemp = StrTemp+Asc(Mid(RandomSeed,i,1))
-	Next
-	SeedRnd Abs(Int(StrTemp))
+	SeedRnd GenerateSeedNumber(RandomSeed)
 	
 	For i = 0 To ChunkAmount%
 		Local loc% = GetINISectionLocation(File$,"chunk"+i)
@@ -8041,7 +7997,6 @@ Function ValidRoom2slCamRoom(r.Rooms)
 	If RN$ = "room1archive" Then Return True
 	If RN$ = "room3z3" Then Return True
 	If RN$ = "room1lifts" Then Return True
-	If RN$ = "room106" Then Return True
 	If RN$ = "checkpoint1" Then Return True
 	If RN$ = "room2nuke" Then Return True
 	If RN$ = "008" Then Return True
@@ -8103,6 +8058,200 @@ Function AddLightCones(room.Rooms)
 	
 End Function
 
+Function CalculateRoomTemplateExtents(r.RoomTemplates)
+	If r\DisableOverlapCheck Then Return
+	
+	GetMeshExtents(GetChild(r\obj,2))
+	r\MinX = Mesh_MinX
+	r\MinY = Mesh_MinY
+	r\MinZ = Mesh_MinZ
+	r\MaxX = Mesh_MaxX
+	r\MaxY = Mesh_MaxY
+	r\MaxZ = Mesh_MaxZ
+	
+	DebugLog("roomtemplateextents: "+r\MinX+", "+r\MinY	+", "+r\MinZ	+", "+r\MaxX	+", "+r\MaxY+", "+r\MaxZ)
+End Function
+
+Function CalculateRoomExtents(r.Rooms)
+	If r\RoomTemplate\DisableOverlapCheck Then Return
+	
+	;shrink the extents slightly - we don't care if the overlap is smaller than the thickness of the walls
+	Local shrinkAmount# = 0.05
+	
+	;convert from the rooms local space to world space
+	TFormVector(r\RoomTemplate\MinX, r\RoomTemplate\MinY, r\RoomTemplate\MinZ, r\obj, 0)
+	r\MinX = TFormedX() + shrinkAmount + r\x
+	r\MinY = TFormedY() + shrinkAmount
+	r\MinZ = TFormedZ() + shrinkAmount + r\z
+	
+	;convert from the rooms local space to world space
+	TFormVector(r\RoomTemplate\MaxX, r\RoomTemplate\MaxY, r\RoomTemplate\MaxZ, r\obj, 0)
+	r\MaxX = TFormedX() - shrinkAmount + r\x
+	r\MaxY = TFormedY() - shrinkAmount
+	r\MaxZ = TFormedZ() - shrinkAmount + r\z
+	
+	If (r\MinX > r\MaxX) Then
+		Local tempX# = r\MaxX
+		r\MaxX = r\MinX
+		r\MinX = tempX
+	EndIf
+	If (r\MinZ > r\MaxZ) Then
+		Local tempZ# = r\MaxZ
+		r\MaxZ = r\MinZ
+		r\MinZ = tempZ
+	EndIf
+	
+	DebugLog("roomextents: "+r\MinX+", "+r\MinY	+", "+r\MinZ	+", "+r\MaxX	+", "+r\MaxY+", "+r\MaxZ)
+End Function
+
+Function CheckRoomOverlap(r1.Rooms, r2.Rooms)
+	If (r1\MaxX	<= r2\MinX Or r1\MaxY <= r2\MinY Or r1\MaxZ <= r2\MinZ) Then Return False
+	If (r1\MinX	>= r2\MaxX Or r1\MinY >= r2\MaxY Or r1\MinZ >= r2\MaxZ) Then Return False
+	
+	Return True
+End Function
+
+Function PreventRoomOverlap(r.Rooms)
+	If r\RoomTemplate\DisableOverlapCheck Then Return
+	
+	Local r2.Rooms,r3.Rooms
+	
+	Local isIntersecting% = False
+	
+	;Just skip it when it would try to check for the checkpoints
+	If r\RoomTemplate\Name = "checkpoint1" Or r\RoomTemplate\Name = "checkpoint2" Or r\RoomTemplate\Name = "start" Then Return True
+	
+	;First, check if the room is actually intersecting at all
+	For r2 = Each Rooms
+		If r2 <> r And (Not r2\RoomTemplate\DisableOverlapCheck) Then
+			If CheckRoomOverlap(r, r2) Then
+				isIntersecting = True
+				Exit
+			EndIf
+		EndIf
+	Next
+	
+	;If not, then simply return it as True
+	If (Not isIntersecting)
+		Return True
+	EndIf
+	
+	;Room is interseting: First, check if the given room is a ROOM2, so we could potentially just turn it by 180 degrees
+	isIntersecting = False
+	Local x% = r\x/8.0
+	Local y% = r\z/8.0
+	If r\RoomTemplate\Shape = ROOM2 Then
+		;Room is a ROOM2, let's check if turning it 180 degrees fixes the overlapping issue
+		r\angle = r\angle + 180
+		RotateEntity r\obj,0,r\angle,0
+		CalculateRoomExtents(r)
+		
+		For r2 = Each Rooms
+			If r2 <> r And (Not r2\RoomTemplate\DisableOverlapCheck) Then
+				If CheckRoomOverlap(r, r2) Then
+					;didn't work -> rotate the room back and move to the next step
+					isIntersecting = True
+					r\angle = r\angle - 180
+					RotateEntity r\obj,0,r\angle,0
+					CalculateRoomExtents(r)
+					Exit
+				EndIf
+			EndIf
+		Next
+	Else
+		isIntersecting = True
+	EndIf
+	
+	;room is ROOM2 and was able to be turned by 180 degrees
+	If (Not isIntersecting)
+		DebugLog "ROOM2 turning succesful! "+r\RoomTemplate\Name
+		Return True
+	EndIf
+	
+	;Room is either not a ROOM2 or the ROOM2 is still intersecting, now trying to swap the room with another of the same type
+	isIntersecting = True
+	Local temp2,x2%,y2%,rot%,rot2%
+	For r2 = Each Rooms
+		If r2 <> r And (Not r2\RoomTemplate\DisableOverlapCheck)  Then
+			If r\RoomTemplate\Shape = r2\RoomTemplate\Shape And r\zone = r2\zone And (r2\RoomTemplate\Name <> "checkpoint1" And r2\RoomTemplate\Name <> "checkpoint2" And r2\RoomTemplate\Name <> "start") Then
+				x = r\x/8.0
+				y = r\z/8.0
+				rot = r\angle
+				
+				x2 = r2\x/8.0
+				y2 = r2\z/8.0
+				rot2 = r2\angle
+				
+				isIntersecting = False
+				
+				r\x = x2*8.0
+				r\z = y2*8.0
+				r\angle = rot2
+				PositionEntity r\obj,r\x,r\y,r\z
+				RotateEntity r\obj,0,r\angle,0
+				CalculateRoomExtents(r)
+				
+				r2\x = x*8.0
+				r2\z = y*8.0
+				r2\angle = rot
+				PositionEntity r2\obj,r2\x,r2\y,r2\z
+				RotateEntity r2\obj,0,r2\angle,0
+				CalculateRoomExtents(r2)
+				
+				;make sure neither room overlaps with anything after the swap
+				For r3 = Each Rooms
+					If (Not r3\RoomTemplate\DisableOverlapCheck) Then
+						If r3 <> r Then
+							If CheckRoomOverlap(r, r3) Then
+								isIntersecting = True
+								Exit
+							EndIf
+						EndIf
+						If r3 <> r2 Then
+							If CheckRoomOverlap(r2, r3) Then
+								isIntersecting = True
+								Exit
+							EndIf
+						EndIf	
+					EndIf
+				Next
+				
+				;Either the original room or the "reposition" room is intersecting, reset the position of each room to their original one
+				If isIntersecting Then
+					r\x = x*8.0
+					r\z = y*8.0
+					r\angle = rot
+					PositionEntity r\obj,r\x,r\y,r\z
+					RotateEntity r\obj,0,r\angle,0
+					CalculateRoomExtents(r)
+					
+					r2\x = x2*8.0
+					r2\z = y2*8.0
+					r2\angle = rot2
+					PositionEntity r2\obj,r2\x,r2\y,r2\z
+					RotateEntity r2\obj,0,r2\angle,0
+					CalculateRoomExtents(r2)
+					
+					isIntersecting = False
+				EndIf
+			EndIf
+					
+		EndIf
+	Next
+	
+	;room was able to the placed in a different spot
+	If (Not isIntersecting)
+		DebugLog "Room re-placing successful! "+r\RoomTemplate\Name
+		Return True
+	EndIf
+	
+	DebugLog "Couldn't fix overlap issue for room "+r\RoomTemplate\Name
+	Return False
+End Function
+
+
+
+
 
 
 
@@ -8111,8 +8260,10 @@ End Function
 
 
 ;~IDEal Editor Parameters:
-;~F#2#A
-;~B#122B
+;~F#2#A#35#102#111#118#11F#126#13F#147#14F#2F4#304#315#33D#34B#35B#360#36B#413
+;~F#51E#53F#563#57F#58A#5C6#5D6#5FF#63B#643#658#6A7#6B1#136A#13EC#13F8#143D#1448#1459#145E
+;~F#146D#1484#1505#150E#15D0#15ED#15F4#15FA#1608#162B#1650#1683#17CA#1803#1818#190C#19E1#19E6#19F6#1CA3
+;~F#1CC2#1CC9#1D2A#1DA6#1DD1#1DF2#1E05#1E1C#1E2F#1E36#1E6A#1E75#1E9D#1EFA#1F06#1F11#1F17#1F21#1F27#1F3D
+;~F#1F51#1F6F
+;~B#1230
 ;~C#Blitz3D
-
-

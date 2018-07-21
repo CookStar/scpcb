@@ -197,10 +197,10 @@ Function InitItemTemplates()
 	it = CreateItemTemplate("Notification", "paper", "GFX\items\paper.x", "GFX\items\INVnote.jpg", "GFX\items\docRAND1.jpg", 0.003, "GFX\items\notetexture.jpg") :it\sound = 0 	
 	it = CreateItemTemplate("Incident Report SCP-106-0204", "paper", "GFX\items\paper.x", "GFX\items\INVpaper.jpg", "GFX\items\docIR106.jpg", 0.003) : it\sound = 0 
 	
-	it = CreateItemTemplate("Ballistic Vest", "vest", "GFX\items\vest.x", "GFX\items\INVvest.jpg", "", 0.02,"GFX\npcs\MTFbody.jpg") : it\sound = 2
-	it = CreateItemTemplate("Heavy Ballistic Vest", "finevest", "GFX\items\vest.x", "GFX\items\INVvest.jpg", "", 0.022,"GFX\npcs\MTFbody.jpg")
+	it = CreateItemTemplate("Ballistic Vest", "vest", "GFX\items\vest.x", "GFX\items\INVvest.jpg", "", 0.02,"GFX\items\Vest.png") : it\sound = 2
+	it = CreateItemTemplate("Heavy Ballistic Vest", "finevest", "GFX\items\vest.x", "GFX\items\INVvest.jpg", "", 0.022,"GFX\items\Vest.png")
 	it\sound = 2
-	it = CreateItemTemplate("Bulky Ballistic Vest", "veryfinevest", "GFX\items\vest.x", "GFX\items\INVvest.jpg", "", 0.025,"GFX\npcs\MTFbody.jpg")
+	it = CreateItemTemplate("Bulky Ballistic Vest", "veryfinevest", "GFX\items\vest.x", "GFX\items\INVvest.jpg", "", 0.025,"GFX\items\Vest.png")
 	it\sound = 2
 	
 	it = CreateItemTemplate("Hazmat Suit", "hazmatsuit", "GFX\items\hazmat.b3d", "GFX\items\INVhazmat.jpg", "", 0.013)
@@ -281,7 +281,7 @@ Function InitItemTemplates()
 	
 	it = CreateItemTemplate("Night Vision Goggles", "supernv", "GFX\items\NVG.b3d", "GFX\items\INVsupernightvision.jpg", "", 0.02) : it\sound = 2
 	it = CreateItemTemplate("Night Vision Goggles", "nvgoggles", "GFX\items\NVG.b3d", "GFX\items\INVnightvision.jpg", "", 0.02) : it\sound = 2
-	it = CreateItemTemplate("Night Vision Goggles", "veryfinenvgoggles", "GFX\items\NVG.b3d", "GFX\items\INVveryfinenightvision.jpg", "", 0.02) : it\sound = 2
+	it = CreateItemTemplate("Night Vision Goggles", "finenvgoggles", "GFX\items\NVG.b3d", "GFX\items\INVveryfinenightvision.jpg", "", 0.02) : it\sound = 2
 	
 	it = CreateItemTemplate("Syringe", "syringe", "GFX\items\Syringe\syringe.b3d", "GFX\items\Syringe\inv.png", "", 0.005) : it\sound = 2
 	it = CreateItemTemplate("Syringe", "finesyringe", "GFX\items\Syringe\syringe.b3d", "GFX\items\Syringe\inv.png", "", 0.005) : it\sound = 2
@@ -424,7 +424,12 @@ Function RemoveItem(i.Items)
 	FreeEntity(i\model) : FreeEntity(i\collider) : i\collider = 0
 	
 	For n% = 0 To MaxItemAmount - 1
-		If Inventory(n) = i Then Inventory(n) = Null
+		If Inventory(n) = i
+			DebugLog "Removed "+i\itemtemplate\name+" from slot "+n
+			Inventory(n) = Null
+			ItemAmount = ItemAmount-1
+			Exit
+		EndIf
 	Next
 	If SelectedItem = i Then
 		Select SelectedItem\itemtemplate\tempname 
@@ -496,9 +501,20 @@ Function UpdateItems()
 					i\zspeed = 0.0
 				Else
 					If ShouldEntitiesFall
-						i\DropSpeed = i\DropSpeed - 0.0004 * FPSfactor
-						TranslateEntity i\collider, i\xspeed*FPSfactor, i\DropSpeed * FPSfactor, i\zspeed*FPSfactor
-						If i\WontColl Then ResetEntity(i\collider)
+						Local pick = LinePick(EntityX(i\collider),EntityY(i\collider),EntityZ(i\collider),0,-10,0)
+						If pick
+							i\DropSpeed = i\DropSpeed - 0.0004 * FPSfactor
+							TranslateEntity i\collider, i\xspeed*FPSfactor, i\DropSpeed * FPSfactor, i\zspeed*FPSfactor
+							If i\WontColl Then ResetEntity(i\collider)
+						Else
+							i\DropSpeed = 0
+							i\xspeed = 0.0
+							i\zspeed = 0.0
+						EndIf
+					Else
+						i\DropSpeed = 0
+						i\xspeed = 0.0
+						i\zspeed = 0.0
 					EndIf
 				EndIf
 				
@@ -513,17 +529,18 @@ Function UpdateItems()
 							ed# = (xtemp*xtemp+ztemp*ztemp)
 							If ed<0.07 And Abs(ytemp)<0.25 Then
 								;items are too close together, push away
-								
-								xtemp = xtemp*(0.07-ed)
-								ztemp = ztemp*(0.07-ed)
-								
-								While Abs(xtemp)+Abs(ztemp)<0.001
-									xtemp = xtemp+Rnd(-0.002,0.002)
-									ztemp = ztemp+Rnd(-0.002,0.002)
-								Wend
-								
-								TranslateEntity i2\collider,xtemp,0,ztemp
-								TranslateEntity i\collider,-xtemp,0,-ztemp
+								If PlayerRoom\RoomTemplate\Name	<> "room2storage" Then
+									xtemp = xtemp*(0.07-ed)
+									ztemp = ztemp*(0.07-ed)
+									
+									While Abs(xtemp)+Abs(ztemp)<0.001
+										xtemp = xtemp+Rnd(-0.002,0.002)
+										ztemp = ztemp+Rnd(-0.002,0.002)
+									Wend
+									
+									TranslateEntity i2\collider,xtemp,0,ztemp
+									TranslateEntity i\collider,-xtemp,0,-ztemp
+								EndIf	
 							EndIf
 						EndIf
 					Next
@@ -533,6 +550,10 @@ Function UpdateItems()
 			Else
 				HideEntity i\collider
 			EndIf
+		Else
+			i\DropSpeed = 0
+			i\xspeed = 0.0
+			i\zspeed = 0.0
 		EndIf
 		
 		If Not deletedItem Then
@@ -579,7 +600,7 @@ Function PickItem(item.Items)
 										PlaySound_Strict(LoadTempSound("SFX\SCP\1123\Touch.ogg"))
 									EndIf
 									e\eventstate = Max(1, e\eventstate)
-
+									
 									Exit
 								EndIf
 							Next
@@ -636,6 +657,7 @@ Function PickItem(item.Items)
 				item\Dropped = -1
 				
 				item\itemtemplate\found=True
+				ItemAmount = ItemAmount + 1
 				
 				Inventory(n) = item
 				HideEntity(item\collider)
@@ -678,7 +700,7 @@ Function DropItem(item.Items)
 			If WearingNightVision = 1 Then CameraFogFar = StoredCameraFogFar : WearingNightVision = False
 		Case "supernv"
 			If WearingNightVision = 2 Then CameraFogFar = StoredCameraFogFar : WearingNightVision = False
-		Case "veryfinenvgoggles"
+		Case "finenvgoggles"
 			If WearingNightVision = 3 Then CameraFogFar = StoredCameraFogFar : WearingNightVision = False
 		Case "scp714"
 			Wearing714 = False
